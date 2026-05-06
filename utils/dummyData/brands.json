@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Zara",
+    "slug": "zara",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/f/fd/Zara_Logo.svg"
+  },
+  {
+    "name": "H&M",
+    "slug": "hm",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/5/53/H%26M-Logo.svg"
+  },
+  {
+    "name": "Bershka",
+    "slug": "bershka",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/29/Bershka_logo.svg"
+  },
+  {
+    "name": "Nike",
+    "slug": "nike",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg"
+  },
+  {
+    "name": "Adidas",
+    "slug": "adidas",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg"
+  },
+  {
+    "name": "Pull&Bear",
+    "slug": "pull-and-bear",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/de/Pull%26Bear_logo.svg"
+  },
+  {
+    "name": "Stradivarius",
+    "slug": "stradivarius",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/d/df/Stradivarius_logo.svg"
+  },
+  {
+    "name": "Mango",
+    "slug": "mango",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Mango_logo.svg"
+  }
+]

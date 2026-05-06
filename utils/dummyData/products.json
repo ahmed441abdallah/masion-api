@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Minimalist Zara Perfume Bottle",
+    "description": "Minimalist Zara Perfume Bottle, made of high quality material, perfect for everyday wear and special occasions with a classic design that never goes out of style",
+    "price": 66,
+    "priceAfterDiscount": 43,
+    "sold": 10,
+    "quantity": 25,
+    "imageCover": "https://images.pexels.com/photos/33139765/pexels-photo-33139765.jpeg",
+    "images": [
+      "https://images.pexels.com/photos/8966050/pexels-photo-8966050.jpeg",
+      "https://images.pexels.com/photos/14736080/pexels-photo-14736080.jpeg",
+      "https://images.pexels.com/photos/12563411/pexels-photo-12563411.jpeg"
+    ],
+    "colors": ["Black", "Brown", "White"],
+    "category": "Beauty & Perfume",
+    "brand": "Zara",
+    "averageRating": 4.8
+  }
+]

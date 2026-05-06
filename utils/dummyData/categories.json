@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Men's Fashion",
+    "slug": "mens-fashion",
+    "image": "https://images.pexels.com/photos/9775880/pexels-photo-9775880.jpeg"
+  },
+  {
+    "name": "Women's Fashion",
+    "slug": "womens-fashion",
+    "image": "https://images.pexels.com/photos/9834884/pexels-photo-9834884.jpeg"
+  },
+  {
+    "name": "Accessories",
+    "slug": "accessories",
+    "image": "https://images.pexels.com/photos/16063725/pexels-photo-16063725.jpeg"
+  },
+  {
+    "name": "Footwear",
+    "slug": "footwear",
+    "image": "https://images.pexels.com/photos/13236693/pexels-photo-13236693.jpeg"
+  },
+  {
+    "name": "Sportswear",
+    "slug": "sportswear",
+    "image": "https://images.pexels.com/photos/5741295/pexels-photo-5741295.jpeg"
+  },
+  {
+    "name": "Beauty & Perfume",
+    "slug": "beauty-perfume",
+    "image": "https://images.pexels.com/photos/33768040/pexels-photo-33768040.jpeg"
+  }
+]

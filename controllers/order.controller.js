@@ -6,13 +6,51 @@ import { User } from '../models/users.model.js';
 import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-/** Stripe redirects must hit your SPA origin, not the API host — set FRONTEND_URL in .env */
+/** Stripe success/cancel URLs use FRONTEND_URL (or CLIENT_URL); default localhost:5173 when unset — fine for Stripe test + local SPA. */
 function clientAppOrigin() {
-  const raw =
-    process.env.FRONTEND_URL ??
-    process.env.CLIENT_URL ??
-    'http://localhost:5173';
+  const raw = (process.env.FRONTEND_URL ?? process.env.CLIENT_URL ?? '').trim();
+  if (!raw) {
+    if (process.env.VERCEL === '1') {
+      console.warn(
+        '[FRONTEND_URL] missing — Stripe will redirect to http://localhost:5173 (set FRONTEND_URL on Vercel when you deploy the frontend).'
+      );
+    }
+    return 'http://localhost:5173';
+  }
   return raw.replace(/\/+$/, '');
+}
+
+/** Stripe metadata keys/values must be strings (max 500 chars each). */
+function checkoutMetadata(req, shippingPrice) {
+  const shipping =
+    typeof req.body?.shippingAddress === 'object' && req.body.shippingAddress !== null
+      ? req.body.shippingAddress
+      : {};
+  const meta = {
+    shipping_price: String(shippingPrice),
+  };
+  try {
+    meta.shipping_json = JSON.stringify(shipping);
+  } catch {
+    meta.shipping_json = '{}';
+  }
+  return meta;
+}
+
+function shippingFromSessionMetadata(metadata) {
+  if (!metadata?.shipping_json) {
+    return { address: '', city: '', phone: '' };
+  }
+  try {
+    const o = JSON.parse(metadata.shipping_json);
+    return {
+      address: o.address != null ? String(o.address) : '',
+      city: o.city != null ? String(o.city) : '',
+      phone: o.phone != null ? String(o.phone) : '',
+    };
+  } catch {
+    return { address: '', city: '', phone: '' };
+  }
 }
 // @desc create order
 // @route POST /api/orders/:cartId
@@ -119,6 +157,7 @@ const createCheckoutSession = asyncHandler(async (req, res) => {
     : cart.totalCartPrice;
   const shippingPrice = orderPrice > 2000 ? 0 : 60;
   const totalAmount = (orderPrice + shippingPrice) * 100;
+  const frontend = clientAppOrigin();
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [
@@ -134,11 +173,11 @@ const createCheckoutSession = asyncHandler(async (req, res) => {
       },
     ],
     mode: 'payment',
-    success_url: `${clientAppOrigin()}/order-success`,
-    cancel_url: `${clientAppOrigin()}/cart`,
-    client_reference_id: cartId,
+    success_url: `${frontend}/order-success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${frontend}/cart`,
+    client_reference_id: String(cartId),
     customer_email: req.user.email,
-    metadata: req.body.shippingAddress,
+    metadata: checkoutMetadata(req, shippingPrice),
   });
   return res.status(200).json({ status: 'success', data: { session } });
 });
@@ -147,64 +186,84 @@ const webhookCheckout = asyncHandler(async (req, res) => {
   let event;
 
   try {
+    let payload = req.body;
+    if (typeof payload === 'object' && payload !== null && !Buffer.isBuffer(payload)) {
+      console.error(
+        'Stripe webhook: body was parsed as JSON — signature check needs raw bytes. Keep express.raw() before express.json() and use the signing secret for THIS endpoint in Stripe.'
+      );
+      return res.status(400).send(
+        'Webhook Error: raw body required for Stripe signature verification'
+      );
+    }
     event = stripe.webhooks.constructEvent(
-      req.body,
+      payload,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
+    console.error('Stripe webhook signature error:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
+    try {
+      const session = event.data.object;
 
-    const cartId = session.client_reference_id;
-    const shippingAddress = session.metadata; // { address, city, phone }
-    const userEmail = session.customer_email;
-    const orderPrice = session.amount_total / 100;
+      const cartId = session.client_reference_id;
+      const userEmail = session.customer_email;
+      const amountTotal = session.amount_total;
+      const orderPrice = amountTotal != null ? amountTotal / 100 : 0;
+      const shippingAddress = shippingFromSessionMetadata(session.metadata);
+      const shippingPrice = Number(session.metadata?.shipping_price ?? 60);
 
-    // 1. Find the cart
-    const cart = await Cart.findById(cartId);
-    if (!cart) {
-      return res.status(404).json({ status: 'error', message: 'Cart not found' });
+      if (!cartId || !userEmail) {
+        console.error('Webhook: missing cartId or customer_email', {
+          cartId,
+          userEmail,
+        });
+      } else {
+        const cart = await Cart.findById(cartId);
+        if (!cart) {
+          console.error('Webhook: cart not found', cartId);
+        } else {
+          const user = await User.findOne({ email: userEmail });
+          if (!user) {
+            console.error('Webhook: user not found', userEmail);
+          } else {
+            await Order.create({
+              user: user._id,
+              cartItems: cart.cartItems,
+              totalOrderPrice: orderPrice,
+              shippingAddress,
+              shippingPrice,
+              paymentMethod: 'card',
+              isPaid: true,
+              paidAt: Date.now(),
+              paymentStatus: 'paid',
+            });
+
+            const bulkOptions = cart.cartItems.map((item) => ({
+              updateOne: {
+                filter: { _id: item.product },
+                update: {
+                  $inc: { quantity: -item.quantity, sold: +item.quantity },
+                },
+              },
+            }));
+            await Product.bulkWrite(bulkOptions, {});
+
+            await Cart.findByIdAndDelete(cartId);
+
+            console.log(`✅ Card order created for ${userEmail}, cart: ${cartId}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Webhook handler error:', e);
     }
-
-    // 2. Find the user by email
-    const user = await User.findOne({ email: userEmail });
-    if (!user) {
-      return res.status(404).json({ status: 'error', message: 'User not found' });
-    }
-
-    // 3. Create the order — marked as paid via card
-    await Order.create({
-      user: user._id,
-      cartItems: cart.cartItems,
-      totalOrderPrice: orderPrice,
-      shippingAddress,
-      shippingPrice: orderPrice > 2000 ? 0 : 60,
-      paymentMethod: 'card',
-      isPaid: true,
-      paidAt: Date.now(),
-      paymentStatus: 'paid',
-    });
-
-    // 4. Update product quantity and sold
-    const bulkOptions = cart.cartItems.map((item) => ({
-      updateOne: {
-        filter: { _id: item.product },
-        update: { $inc: { quantity: -item.quantity, sold: +item.quantity } },
-      },
-    }));
-    await Product.bulkWrite(bulkOptions, {});
-
-    // 5. Clear the cart
-    await Cart.findByIdAndDelete(cartId);
-
-    console.log(`✅ Card order created for ${userEmail}, cart: ${cartId}`);
   }
 
-  res.status(200).json({ received: true });
+  return res.status(200).json({ received: true });
 });
 export {
   createCashOrder,

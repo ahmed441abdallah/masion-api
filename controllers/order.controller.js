@@ -5,6 +5,15 @@ import Product from '../models/product.model.js';
 import { User } from '../models/users.model.js';
 import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+/** Stripe redirects must hit your SPA origin, not the API host — set FRONTEND_URL in .env */
+function clientAppOrigin() {
+  const raw =
+    process.env.FRONTEND_URL ??
+    process.env.CLIENT_URL ??
+    'http://localhost:5173';
+  return raw.replace(/\/+$/, '');
+}
 // @desc create order
 // @route POST /api/orders/:cartId
 // @access private/user
@@ -125,8 +134,8 @@ const createCheckoutSession = asyncHandler(async (req, res) => {
       },
     ],
     mode: 'payment',
-    success_url: `${req.protocol}://${req.get('host')}/order-success`,
-    cancel_url: `${req.protocol}://${req.get('host')}/cart`,
+    success_url: `${clientAppOrigin()}/order-success`,
+    cancel_url: `${clientAppOrigin()}/cart`,
     client_reference_id: cartId,
     customer_email: req.user.email,
     metadata: req.body.shippingAddress,

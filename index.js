@@ -21,7 +21,7 @@ app.use(compression());
 const port = process.env.PORT || 3000;
 app.set('query parser', 'extended');
 // Connect to MongoDB
-connectDB();
+await connectDB();
 mountRoutes(app);
 // 404 error handling middleware
 app.all('{*path}', (req, res, next) => {

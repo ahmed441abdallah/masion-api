@@ -4,7 +4,7 @@ import Order from '../models/order.model.js';
 import Product from '../models/product.model.js';
 import { User } from '../models/users.model.js';
 import Stripe from 'stripe';
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY.trim());
 
 /** Stripe success/cancel URLs use FRONTEND_URL (or CLIENT_URL); default localhost:5173 when unset — fine for Stripe test + local SPA. */
 function clientAppOrigin() {
@@ -219,7 +219,7 @@ const webhookCheckout = async (req, res) => {
     event = stripe.webhooks.constructEvent(
       payload,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET
+      process.env.STRIPE_WEBHOOK_SECRET.trim()
     );
     console.log('✅ Signature verified! Event type:', event.type);
   } catch (err) {

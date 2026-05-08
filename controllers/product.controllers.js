@@ -1,12 +1,9 @@
 import asyncHandler from 'express-async-handler';
-// eslint-disable-next-line import/extensions
 import AppError from '../utils/AppError.js';
-// eslint-disable-next-line import/extensions
 import Product from '../models/product.model.js';
 import ApiFeatures from '../utils/Apifeatures .js';
 import * as factory from '../controllers/handlerFactory.js';
  
-
 // @desc get all products
 // @route GET /api/products
 // @access Public

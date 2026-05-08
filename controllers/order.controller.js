@@ -23,7 +23,8 @@ function clientAppOrigin() {
 /** Stripe metadata keys/values must be strings (max 500 chars each). */
 function checkoutMetadata(req, shippingPrice) {
   const shipping =
-    typeof req.body?.shippingAddress === 'object' && req.body.shippingAddress !== null
+    typeof req.body?.shippingAddress === 'object' &&
+    req.body.shippingAddress !== null
       ? req.body.shippingAddress
       : {};
   const meta = {
@@ -181,34 +182,54 @@ const createCheckoutSession = asyncHandler(async (req, res) => {
   });
   return res.status(200).json({ status: 'success', data: { session } });
 });
-const webhookCheckout = asyncHandler(async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
+const webhookCheckout = async (req, res) => {
+  console.log('🔔 Webhook hit! Method:', req.method);
+  console.log('🔔 Headers stripe-signature:', req.headers['stripe-signature'] ? 'present' : 'MISSING');
+  console.log('🔔 Body type:', typeof req.body, '| isBuffer:', Buffer.isBuffer(req.body), '| length:', req.body?.length);
+  console.log('🔔 STRIPE_WEBHOOK_SECRET set:', !!process.env.STRIPE_WEBHOOK_SECRET);
 
+  const sig = req.headers['stripe-signature'];
+  if (!sig) {
+    console.error('❌ No stripe-signature header found');
+    return res.status(400).send('Webhook Error: Missing stripe-signature header');
+  }
+
+  let event;
   try {
+    // Determine the raw payload — handle Vercel edge cases
     let payload = req.body;
-    if (typeof payload === 'object' && payload !== null && !Buffer.isBuffer(payload)) {
-      console.error(
-        'Stripe webhook: body was parsed as JSON — signature check needs raw bytes. Keep express.raw() before express.json() and use the signing secret for THIS endpoint in Stripe.'
-      );
-      return res.status(400).send(
-        'Webhook Error: raw body required for Stripe signature verification'
-      );
+
+    // If Vercel delivered the body as a string, convert to Buffer
+    if (typeof payload === 'string') {
+      console.log('🔔 Body is string, converting to Buffer');
+      payload = Buffer.from(payload, 'utf-8');
     }
+
+    // If body was pre-parsed as JSON object (Vercel may do this)
+    if (typeof payload === 'object' && payload !== null && !Buffer.isBuffer(payload)) {
+      console.error('❌ Body was parsed as JSON object — cannot verify signature');
+      return res.status(400).send('Webhook Error: raw body required for Stripe signature verification');
+    }
+
+    if (!payload || payload.length === 0) {
+      console.error('❌ Empty body received');
+      return res.status(400).send('Webhook Error: empty body');
+    }
+
     event = stripe.webhooks.constructEvent(
       payload,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
+    console.log('✅ Signature verified! Event type:', event.type);
   } catch (err) {
-    console.error('Stripe webhook signature error:', err.message);
+    console.error('❌ Stripe webhook signature error:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   if (event.type === 'checkout.session.completed') {
     try {
       const session = event.data.object;
-
       const cartId = session.client_reference_id;
       const userEmail = session.customer_email;
       const amountTotal = session.amount_total;
@@ -216,21 +237,20 @@ const webhookCheckout = asyncHandler(async (req, res) => {
       const shippingAddress = shippingFromSessionMetadata(session.metadata);
       const shippingPrice = Number(session.metadata?.shipping_price ?? 60);
 
+      console.log('🔔 Processing checkout.session.completed:', { cartId, userEmail, orderPrice });
+
       if (!cartId || !userEmail) {
-        console.error('Webhook: missing cartId or customer_email', {
-          cartId,
-          userEmail,
-        });
+        console.error('❌ Missing cartId or customer_email', { cartId, userEmail });
       } else {
         const cart = await Cart.findById(cartId);
         if (!cart) {
-          console.error('Webhook: cart not found', cartId);
+          console.error('❌ Cart not found:', cartId);
         } else {
           const user = await User.findOne({ email: userEmail });
           if (!user) {
-            console.error('Webhook: user not found', userEmail);
+            console.error('❌ User not found:', userEmail);
           } else {
-            await Order.create({
+            const order = await Order.create({
               user: user._id,
               cartItems: cart.cartItems,
               totalOrderPrice: orderPrice,
@@ -251,20 +271,19 @@ const webhookCheckout = asyncHandler(async (req, res) => {
               },
             }));
             await Product.bulkWrite(bulkOptions, {});
-
             await Cart.findByIdAndDelete(cartId);
 
-            console.log(`✅ Card order created for ${userEmail}, cart: ${cartId}`);
+            console.log(`✅ Order created! ID: ${order._id}, user: ${userEmail}, cart: ${cartId}`);
           }
         }
       }
     } catch (e) {
-      console.error('Webhook handler error:', e);
+      console.error('❌ Webhook handler error:', e);
     }
   }
 
   return res.status(200).json({ received: true });
-});
+};
 export {
   createCashOrder,
   getOrderById,

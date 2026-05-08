@@ -12,7 +12,9 @@ const orderRouter = express.Router();
 orderRouter.use(protectRoute);
 // admins get all orders; users get own orders — same path, branch on role
 orderRouter.get('/', allowedTo('user', 'admin'), (req, res, next) => {
-  const role = String(req.user.role ?? '').trim().toLowerCase();
+  const role = String(req.user.role ?? '')
+    .trim()
+    .toLowerCase();
   if (role === 'admin') {
     return getAllOrders(req, res, next);
   }
